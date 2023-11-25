@@ -1,3 +1,5 @@
+import {ethers} from "ethers";
+
 export default function Escrow({
   address,
   arbiter,
@@ -17,8 +19,8 @@ export default function Escrow({
           <div> {beneficiary} </div>
         </li>
         <li>
-          <div> Value </div>
-          <div> {value} </div>
+          <div> Value (ETH) </div>
+          <div title={"Wei: " + value}> {ethers.utils.formatEther(value)} </div>
         </li>
         <div
           className="button"

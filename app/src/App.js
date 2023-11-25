@@ -5,6 +5,8 @@ import Escrow from './Escrow';
 
 const provider = new ethers.providers.Web3Provider(window.ethereum);
 
+const REGEX_ETH_AMOUNT = /^[0-9]*\.?[0-9]{0,18}$/;
+
 export async function approve(escrowContract, signer) {
   const approveTxn = await escrowContract.connect(signer).approve();
   await approveTxn.wait();
@@ -14,6 +16,7 @@ function App() {
   const [escrows, setEscrows] = useState([]);
   const [account, setAccount] = useState();
   const [signer, setSigner] = useState();
+  const [ethAmount, setEthAmount] = useState("");
 
   useEffect(() => {
     async function getAccounts() {
@@ -29,15 +32,16 @@ function App() {
   async function newContract() {
     const beneficiary = document.getElementById('beneficiary').value;
     const arbiter = document.getElementById('arbiter').value;
-    const value = ethers.BigNumber.from(document.getElementById('wei').value);
-    const escrowContract = await deploy(signer, arbiter, beneficiary, value);
+    const valueEthString = String(document.getElementById('eth').value);
+    const valueWei = ethers.utils.parseEther(valueEthString);
+    const escrowContract = await deploy(signer, arbiter, beneficiary, valueWei);
 
 
     const escrow = {
       address: escrowContract.address,
       arbiter,
       beneficiary,
-      value: value.toString(),
+      value: valueWei.toString(),
       handleApprove: async () => {
         escrowContract.on('Approved', () => {
           document.getElementById(escrowContract.address).className =
@@ -52,6 +56,17 @@ function App() {
 
     setEscrows([...escrows, escrow]);
   }
+
+  const handleEthChange = (event) => {
+    const { value } = event.target;
+    if (REGEX_ETH_AMOUNT.test(value) || value === '') {
+      setEthAmount(value);
+    }
+  };
+
+  const generateAmountTitle = (event) => {
+    return ethAmount ? "Wei: " + ethers.utils.parseEther(ethAmount) : "";
+  };
 
   return (
     <>
@@ -68,8 +83,8 @@ function App() {
         </label>
 
         <label>
-          Deposit Amount (in Wei)
-          <input type="text" id="wei" />
+          Deposit Amount (in Eth)
+          <input type="text" id="eth" value={ethAmount} onChange={handleEthChange} title={generateAmountTitle()} />
         </label>
 
         <div
