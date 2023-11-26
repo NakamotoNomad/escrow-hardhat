@@ -6,6 +6,7 @@ export default function Escrow({
   beneficiary,
   value,
   handleApprove,
+  approved,
 }) {
   return (
     <div className="existing-contract">
@@ -23,7 +24,7 @@ export default function Escrow({
           <div title={"Wei: " + value}> {ethers.utils.formatEther(value)} </div>
         </li>
         <div
-          className="button"
+          className={approved ? "complete" : "button"}
           id={address}
           onClick={(e) => {
             e.preventDefault();
@@ -31,7 +32,7 @@ export default function Escrow({
             handleApprove();
           }}
         >
-          Approve
+          {approved ? "✓ It's been approved!" : "Approve"}
         </div>
       </ul>
     </div>
