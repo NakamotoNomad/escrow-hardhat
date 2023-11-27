@@ -1,4 +1,5 @@
 import {ethers} from "ethers";
+import { STATUS_OPEN, STATUS_APPROVED, STATUS_DENIED } from './Constants';
 
 export default function Escrow({
   address,
@@ -6,8 +7,17 @@ export default function Escrow({
   beneficiary,
   value,
   handleApprove,
-  approved,
+  handleDeny,
+  status,
 }) {
+  let approveButtonText;
+  if (status === STATUS_OPEN) {
+    approveButtonText = "Approve";
+  } else if (status === STATUS_APPROVED) {
+    approveButtonText = "✓ It's been approved!";
+  } else if (status === STATUS_DENIED) {
+    approveButtonText = "x It's been denied!";
+  }
   return (
     <div className="existing-contract">
       <ul className="fields">
@@ -24,7 +34,7 @@ export default function Escrow({
           <div title={"Wei: " + value}> {ethers.utils.formatEther(value)} </div>
         </li>
         <div
-          className={approved ? "complete" : "button"}
+          className={status !== STATUS_OPEN ? "complete" : "button"}
           id={address}
           onClick={(e) => {
             e.preventDefault();
@@ -32,8 +42,21 @@ export default function Escrow({
             handleApprove();
           }}
         >
-          {approved ? "✓ It's been approved!" : "Approve"}
+          {approveButtonText}
         </div>
+        { status === STATUS_OPEN ? (
+          <div
+              className={"button"}
+              id={address}
+              onClick={(e) => {
+                e.preventDefault();
+
+                handleDeny();
+              }}
+          >
+            {"Deny"}
+          </div>
+        ) : null }
       </ul>
     </div>
   );

@@ -2,6 +2,7 @@ import {BigNumber, ethers} from 'ethers';
 import { useEffect, useState } from 'react';
 import deploy from './deploy';
 import Escrow from './Escrow';
+import { STATUS_OPEN, STATUS_APPROVED, STATUS_DENIED } from './Constants';
 
 const provider = new ethers.providers.Web3Provider(window.ethereum);
 
@@ -35,6 +36,19 @@ const ESCROW_ABI = [
       }
     ],
     "name": "Approved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "Denied",
     "type": "event"
   },
   {
@@ -72,6 +86,13 @@ const ESCROW_ABI = [
   },
   {
     "inputs": [],
+    "name": "deny",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "depositor",
     "outputs": [
       {
@@ -85,12 +106,12 @@ const ESCROW_ABI = [
   },
   {
     "inputs": [],
-    "name": "isApproved",
+    "name": "status",
     "outputs": [
       {
-        "internalType": "bool",
+        "internalType": "enum Escrow.Status",
         "name": "",
-        "type": "bool"
+        "type": "uint8"
       }
     ],
     "stateMutability": "view",
@@ -102,6 +123,12 @@ export async function approve(escrowContract, signer) {
   const approveTxn = await escrowContract.connect(signer).approve();
   await approveTxn.wait();
 }
+
+export async function deny(escrowContract, signer) {
+  const denyTxn = await escrowContract.connect(signer).deny();
+  await denyTxn.wait();
+}
+
 
 function App() {
   const [escrows, setEscrows] = useState([]);
@@ -131,6 +158,12 @@ function App() {
     setSigner(provider.getSigner());
   }
 
+  const updateEscrowStatus = (address, newStatus) => {
+    setEscrows(escrows => escrows.map(escrow =>
+        escrow.address === address ? { ...escrow, status: newStatus } : escrow
+    ));
+  };
+
   async function newContract() {
     const beneficiary = document.getElementById('beneficiary').value;
     const arbiter = document.getElementById('arbiter').value;
@@ -140,7 +173,7 @@ function App() {
 
     console.log(`Escrow contract created at address: ${escrowContract.address}`);
 
-    const escrow = createEscrow(escrowContract, arbiter, beneficiary, valueWei, false);
+    const escrow = createEscrow(escrowContract, arbiter, beneficiary, valueWei, STATUS_OPEN);
 
     fetch(`http://localhost:3001/contractDeployed/${escrowContract.address}`, {
       method: 'POST',
@@ -152,13 +185,13 @@ function App() {
     setEscrows([...escrows, escrow]);
   }
 
-  function createEscrow(escrowContract, arbiter, beneficiary, valueWei, isApproved) {
+  function createEscrow(escrowContract, arbiter, beneficiary, valueWei, status) {
     return {
       address: escrowContract.address,
       arbiter,
       beneficiary,
       value: valueWei.toString(),
-      approved: isApproved,
+      status,
       handleApprove: async () => {
         /*
         In React, state updates are asynchronous. When you update a state variable "signer", the updated value isn't
@@ -172,12 +205,24 @@ function App() {
           currentSigner = provider.getSigner();
         }
         escrowContract.on('Approved', () => {
-          document.getElementById(escrowContract.address).className = 'complete';
-          document.getElementById(escrowContract.address).innerText = "✓ It's been approved!";
+          updateEscrowStatus(escrowContract.address, STATUS_APPROVED);
         });
 
         console.log(`Handling approve for contract ${escrowContract.address} with signer ${currentSigner}`);
         await approve(escrowContract, currentSigner);
+      },
+      handleDeny: async () => {
+        let currentSigner = signer;
+        if (!signer) {
+          await getAccounts();
+          currentSigner = provider.getSigner();
+        }
+        escrowContract.on('Denied', () => {
+          updateEscrowStatus(escrowContract.address, STATUS_DENIED);
+        });
+
+        console.log(`Handling deny for contract ${escrowContract.address} with signer ${currentSigner}`);
+        await deny(escrowContract, currentSigner);
       },
     };
   }
@@ -202,22 +247,29 @@ function App() {
 
       const arbiterAddress = await contract.arbiter();
       const beneficiaryAddress = await contract.beneficiary();
+      const status = await contract.status();
       let valueWei = await provider.getBalance(address);
-      const approvedAmount = await loadApprovedAmount(contract);
-      valueWei = valueWei.add(approvedAmount)
-      console.log(`Contract ${address}:\nArbiter: ${arbiterAddress}, beneficiary: ${beneficiaryAddress}, value wei (total): ${valueWei}, approved amount: ${approvedAmount}`);
-      const escrow = createEscrow(contract, arbiterAddress, beneficiaryAddress, valueWei, !approvedAmount.isZero());
+      const transferredAmount = await loadTransferredAmount(contract);
+      valueWei = valueWei.add(transferredAmount)
+      console.log(`Contract ${address}:\nArbiter: ${arbiterAddress}, beneficiary: ${beneficiaryAddress}, value wei (total): ${valueWei}, approved amount: ${transferredAmount}`);
+      const escrow = createEscrow(contract, arbiterAddress, beneficiaryAddress, valueWei, status);
       newEscrows.push(escrow);
     }
     setEscrows([...escrows, ...newEscrows]);
   }
 
-  async function loadApprovedAmount(contract) {
+  async function loadTransferredAmount(contract) {
     // Query the event logs for the 'Approved' event
-    const events = await contract.queryFilter(contract.filters.Approved());
+    const approveEvents = await contract.queryFilter(contract.filters.Approved());
 
-    if (events.length > 0) {
-      return events[0].args[0];
+    if (approveEvents.length > 0) {
+      return approveEvents[0].args[0];
+    }
+
+    const denyEvents = await contract.queryFilter(contract.filters.Denied());
+
+    if (denyEvents.length > 0) {
+      return denyEvents[0].args[0];
     }
     return BigNumber.from(0);
   }

@@ -33,12 +33,28 @@ describe('Escrow', function () {
     });
   });
 
+  describe('after denial from address other than the arbiter', () => {
+    it('should revert', async () => {
+      await expect(contract.connect(beneficiary).deny()).to.be.reverted;
+    });
+  });
+
   describe('after approval from the arbiter', () => {
     it('should transfer balance to beneficiary', async () => {
       const before = await ethers.provider.getBalance(beneficiary.getAddress());
       const approveTxn = await contract.connect(arbiter).approve();
       await approveTxn.wait();
       const after = await ethers.provider.getBalance(beneficiary.getAddress());
+      expect(after.sub(before)).to.eq(deposit);
+    });
+  });
+
+  describe('after denial from the arbiter', () => {
+    it('should transfer balance to depositor', async () => {
+      const before = await ethers.provider.getBalance(depositor.getAddress());
+      const approveTxn = await contract.connect(arbiter).deny();
+      await approveTxn.wait();
+      const after = await ethers.provider.getBalance(depositor.getAddress());
       expect(after.sub(before)).to.eq(deposit);
     });
   });
